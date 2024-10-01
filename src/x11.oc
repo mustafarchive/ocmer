@@ -1,0 +1,263 @@
+// #include <X11/Xlib.h>
+// #include <X11/X.h>
+// #include <X11/Xutil.h>
+
+@compiler c_include "X11/Xlib.h"
+@compiler c_include "X11/X.h"
+@compiler c_include "X11/Xutil.h"
+@compiler c_include "X11/extensions/Xrandr.h"
+@compiler c_include "X11/extensions/XInput.h"
+@compiler c_include "X11/cursorfont.h"
+
+[extern] struct Display {}
+[extern] struct Window {}
+[extern "XImage"] struct Image {
+    height: i32
+    width: i32
+    data: &u8
+}
+[extern "XWindowAttributes"] struct WindowAttributes {
+    height: i32
+    width: i32
+}
+
+[extern "i32"]
+enum Format {
+    XYBitmap = extern("XYBitmap"),
+    XYPixmap = extern("XYPixmap"),
+    ZPixmap = extern("ZPixmap")
+}
+
+[extern "XOpenDisplay"]
+def open_display(display_name: str): &Display
+
+[extern "DefaultRootWindow"]
+def default_root_window(display: &Display): Window
+
+[extern "XCreateWindow"]
+def create_window(
+    display: &Display,
+    parent: Window,
+    x: i32, y: i32,
+    width: i32, height: i32,
+    border_width: i32,
+    depth: i32,
+    class: i32,
+    visual: u32,
+    valuemask: u32,
+    attributes: &SetWindowAttributes
+): Window
+
+[extern "XGetImage"]
+def Display::get_image(
+    &this,
+    window: Window,
+    x: i32, y: i32,
+    width: i32, height: i32,
+    plane_mask: i32, format: Format
+): &Image
+
+[extern "XGetSubImage"]
+def Display::get_sub_image(
+    &this,
+    image: &Image,
+    x: i32, y: i32,
+    width: i32, height: i32,
+    plane_mask: i32, format: i32,
+    dest_image: &Image,
+    dest_x: i32, dest_y: i32
+): &Image
+
+
+[extern "XGetWindowAttributes"]
+def get_window_attributes(
+    display: &Display,
+    window: Window,
+    attributes: &WindowAttributes
+): i32
+
+def Window::get_attributes(this, display: &Display): WindowAttributes {
+    let attributes: WindowAttributes
+    get_window_attributes(display, this, &attributes)
+    return attributes
+}
+
+[extern "XDestroyImage"]
+def Image::destroy(&this)
+
+[extern "XQueryPointer"]
+def query_pointer(
+    display: &Display,
+    window: Window,
+    root_return: &Window,
+    child_return: &Window,
+    root_x_return: &i32,
+    root_y_return: &i32,
+    win_x_return: &i32,
+    win_y_return: &i32,
+    mask_return: &u32
+): i32
+
+
+[extern "XC_crosshair"] const C_crosshair: i32
+[extern "XC_left_ptr"] const C_left_ptr: i32
+[extern "XC_right_ptr"] const C_right_ptr: i32
+
+[extern "ButtonMotionMask"] const ButtonMotionMask: u32
+[extern "ButtonPressMask"] const ButtonPressMask: u32
+[extern "ButtonReleaseMask"] const ButtonReleaseMask: u32
+[extern "PointerMotionMask"] const PointerMotionMask: u32
+[extern "KeyPressMask"] const KeyPressMask: u32
+[extern "KeyReleaseMask"] const KeyReleaseMask: u32
+[extern "ExposureMask"] const ExposureMask: u32
+[extern "ClientMessage"] const ClientMessage: u32
+
+
+[extern "GrabModeAsync"] const GrabModeAsync: i32
+[extern "GrabModeSync"] const GrabModeSync: i32
+
+[extern "InputOutput"] const InputOutput: i32
+
+[extern "CWColormap"] const CWColormap: u32
+[extern "CWEventMask"] const CWEventMask: u32
+[extern "CWOverrideRedirect"] const CWOverrideRedirect: u32
+[extern "CWSaveUnder"] const CWSaveUnder: u32
+
+[extern "CurrentTime"] const CurrentTime: u32
+
+
+[extern "XCreateFontCursor"]
+def create_font_cursor(display: &Display, shape: i32): u32
+
+[extern "XFreeCursor"]
+def free_cursor(display: &Display, cursor: u32)
+
+[extern "XGrabPointer"]
+def grab_pointer(
+    display: &Display,
+    window: Window,
+    owner_events: i32,
+    event_mask: u32,
+    pointer_mode: i32,
+    keyboard_mode: i32,
+    confine_to: Window,
+    cursor: u32,
+    time: u32
+): i32
+
+[extern "XUngrabPointer"]
+def ungrab_pointer(display: &Display, time: u32)
+
+[extern "XGrabKeyboard"]
+def grab_keyboard(
+    display: &Display,
+    window: Window,
+    owner_events: i32,
+    pointer_mode: i32,
+    keyboard_mode: i32,
+    time: u32
+): i32
+
+[extern "XUngrabKeyboard"]
+def ungrab_keyboard(display: &Display, time: u32)
+
+[extern "i32"]
+enum EventType {
+    KeyPress = extern("KeyPress"),
+    ButtonPress = extern("ButtonPress"),
+}
+
+[extern "XButtonEvent"]
+struct ButtonEvent {
+    subwindow: Window
+}
+
+[extern "XMotionEvent"]
+struct MotionEvent {}
+
+[extern "XEvent"]
+struct Event {
+    type: EventType
+    xmotion: MotionEvent
+    xbutton: ButtonEvent
+}
+
+[extern "XNextEvent"]
+def next_event(display: &Display, event: &Event): i32
+
+[extern "XErrorEvent"]
+struct ErrorEvent {
+    error_code: i32
+}
+
+[extern "XGetErrorText"]
+def get_error_text(display: &Display, error_code: i32, buffer: str, length: i32): i32
+
+[extern "XSetErrorHandler"]
+def set_error_handler(handler: fn(&Display, &ErrorEvent): i32)
+
+[extern "XRRScreenConfiguration"]
+struct ScreenConfiguration {}
+
+[extern "XRRGetScreenInfo"]
+def get_screen_info(display: &Display, window: Window): &ScreenConfiguration
+
+[extern "XRRConfigCurrentRate"]
+def get_current_rate(config: &ScreenConfiguration): i32
+
+[extern "XDefaultScreen"]
+def default_screen(display: &Display): i32
+
+[extern "XVisualInfo"]
+struct VisualInfo {
+    visual: u32
+    depth: i32
+}
+
+[extern "XSetWindowAttributes"]
+struct SetWindowAttributes {
+    colormap: u32
+    event_mask: u32
+    override_redirect: i32
+    save_under: i32
+}
+
+[extern "XCreateColormap"]
+def create_colormap(display: &Display, window: Window, visual: u32, alloc: i32): u32
+
+[extern "AllocNone"] const AllocNone: i32
+
+[extern "XMapWindow"]
+def map_window(display: &Display, window: Window)
+
+[extern "XClassHint"]
+struct ClassHint {
+    res_name: str
+    res_class: str
+}
+
+[extern "XSetClassHint"]
+def set_class_hint(display: &Display, window: Window, hint: &ClassHint)
+
+[extern "XStoreName"]
+def store_name(display: &Display, window: Window, name: str)
+
+[extern "Atom"]
+struct Atom {}
+
+[extern "XInternAtom"]
+def intern_atom(display: &Display, name: str, only_if_exists: i32): Atom
+
+[extern "XSetWMProtocols"]
+def set_wm_protocols(display: &Display, window: Window, protocols: &Atom, count: i32)
+
+[extern "XGetInputFocus"]
+def get_input_focus(display: &Display, focus_return: &Window, revert_to_return: &i32)
+
+
+[extern "RevertToNone"] const RevertToNone: i32
+[extern "RevertToParent"] const RevertToParent: i32
+[extern "RevertToPointerRoot"] const RevertToPointerRoot: i32
+
+[extern "XSetInputFocus"]
+def set_input_focus(display: &Display, window: Window, revert_to: i32, time: u32)

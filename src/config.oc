@@ -1,0 +1,50 @@
+import std::fs
+import std::buffer::{ Buffer }
+
+struct Config {
+    min_scale: f32,
+    scroll_speed: f32,
+    drag_friction: f32,
+    scale_friction: f32,
+}
+
+let default_config: Config = Config(0.01, 1.5, 6.0, 4.0)
+
+def Config::load(filename: str): Config {
+    let data = fs::read_file(filename)
+    let sv = data.sv()
+    let result = default_config
+
+    for line in sv.lines() {
+        line.trim()
+        if line.len == 0 or line[0] == '#' {
+            continue
+        }
+        let key = line.chop_by_delim('=')
+        key.trim()
+        let value = line
+        value.trim()
+        match key {
+            "min_scale" => result.min_scale = value.chop_f32(),
+            "scroll_speed" => result.scroll_speed = value.chop_f32(),
+            "drag_friction" => result.drag_friction = value.chop_f32(),
+            "scale_friction" => result.scale_friction = value.chop_f32(),
+            else => {
+                println(f"ERROR: Unknown key `{key}` in config `{filename}`")
+                std::exit(1)
+            }
+        }
+    }
+    data.free()
+    return result
+}
+
+def generate_default_config(filename: str) {
+    let buf = Buffer::make()
+    buf <<= f"min_scale={default_config.min_scale}\n"
+    buf <<= f"scroll_speed={default_config.scroll_speed}\n"
+    buf <<= f"drag_friction={default_config.drag_friction}\n"
+    buf <<= f"scale_friction={default_config.scale_friction}\n"
+    fs::write_file(filename, buf)
+    buf.free()
+}

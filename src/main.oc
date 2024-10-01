@@ -1,0 +1,378 @@
+import .x11
+import .screenshot as ss
+import std::buffer::{ Buffer }
+import std::math
+import std::fs
+import std::vec::{ Vec2f }
+import .gl
+import .config::{ default_config, Config }
+import .camera::{ Camera, Mouse }
+
+def color_screenshot(img: &x11::Image) {
+    for let i = 0i32; i < img.height; i++ {
+        for let j = 0i32; j < img.width; j++ {
+            let u = (((i as f32) / (img.height as f32)) * 255.0) as u8
+            let v = (((j as f32) / (img.width as f32)) * 255.0) as u8
+
+            let off = (i * img.width + j) * 4
+            img.data[off + 0] = 0
+            img.data[off + 1] = u
+            img.data[off + 2] = v
+        }
+    }
+}
+
+struct Shader {
+    path: str
+    content: Buffer
+}
+
+def Shader::read(path: str): Shader => Shader(path, fs::read_file(path))
+
+def Shader::reload(&this) {
+    .content.free()
+    .content = fs::read_file(.path)
+}
+
+struct Flashlight {
+    enabled: bool
+    shadow: f32
+    radius: f32
+    delta_radius: f32
+}
+
+
+const INITIAL_FL_DELTA_RADIUS: f32 = 250.0
+const FL_DELTA_RADIUS_DECELERATION: f32 = 10.0
+
+def Flashlight::update(&this, dt: f32) {
+    if .delta_radius.abs() > 1.0 {
+        .radius = (.radius + .delta_radius * dt).max(0.0)
+        .delta_radius -= .delta_radius * FL_DELTA_RADIUS_DECELERATION * dt
+    }
+
+    if .enabled {
+        .shadow = (.shadow + 6.0 * dt).min(0.8)
+    } else {
+        .shadow = (.shadow - 6.0 * dt).max(0.0)
+    }
+}
+
+def new_shader(shader: Shader, kind: u32): u32 {
+    let result = gl::create_shader(kind)
+    gl::shader_source(result, 1, shader.content.str() as untyped_ptr, null)
+    gl::compile_shader(result)
+
+    let success: i32
+    gl::get_shaderiv(result, gl::COMPILE_STATUS, &success)
+    if success == 0 {
+        let info: [char; 512]
+        gl::get_shader_info_log(result, 512, null, info)
+        println(f"ERROR: Shader compilation failed: {info}")
+        std::exit(1)
+    }
+    return result
+}
+
+def new_shader_program(vert: Shader, frag: Shader): u32 {
+    println("---- new_shader_program")
+    let result = gl::create_program()
+    println("---- << new_shader_program")
+    let vert_id = new_shader(vert, gl::VERTEX_SHADER)
+    let frag_id = new_shader(frag, gl::FRAGMENT_SHADER)
+
+    gl::attach_shader(result, vert_id)
+    gl::attach_shader(result, frag_id)
+    gl::link_program(result)
+    gl::delete_shader(vert_id)
+    gl::delete_shader(frag_id)
+
+    let success: i32
+    gl::get_programiv(result, gl::LINK_STATUS, &success)
+    if success == 0 {
+        let info: [char; 512]
+        gl::get_program_info_log(result, 512, null, info)
+        println(f"ERROR: Shader program linking failed: {info}")
+        std::exit(1)
+    }
+
+    gl::use_program(result)
+    return result
+}
+
+def draw(
+    shot: &x11::Image,
+    camera: Camera,
+    shader: u32, vao: u32, texture: u32,
+    window_size: Vec2f,
+    mouse: Mouse,
+    flashlight: Flashlight,
+) {
+    gl::clear_color(0.1, 0.1, 0.1, 1.0)
+    gl::clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT)
+    gl::use_program(shader)
+
+    gl::uniform2f(gl::UL(shader, "cameraPos"), camera.position.x, camera.position.y)
+    gl::uniform1f(gl::UL(shader, "cameraScale"), camera.scale)
+    gl::uniform2f(gl::UL(shader, "screenshotSize"), shot.width as f32, shot.height as f32)
+    gl::uniform2f(gl::UL(shader, "windowSize"), window_size.x, window_size.y)
+    gl::uniform2f(gl::UL(shader, "cursorPos"), mouse.curr.x, mouse.curr.y)
+    gl::uniform1f(gl::UL(shader, "flShadow"), flashlight.shadow)
+    gl::uniform1f(gl::UL(shader, "flRadius"), flashlight.radius)
+    gl::bind_vertex_array(vao)
+    gl::draw_elements(gl::TRIANGLES, count: 6, gl::UNSIGNED_INT, indices: null)
+}
+
+def get_cursor_pos(display: &x11::Display): Vec2f {
+    let root: x11::Window
+    let child: x11::Window
+    let root_x: i32
+    let root_y: i32
+    let win_x: i32
+    let win_y: i32
+    let mask: u32
+    x11::query_pointer(
+        display,
+        x11::default_root_window(display),
+        &root, &child,
+        &root_x, &root_y,
+        &win_x, &win_y,
+        &mask
+    )
+    return Vec2f(root_x as f32, root_y as f32)
+}
+
+def select_window(display: &x11::Display): x11::Window {
+    let cursor = x11::create_font_cursor(display, x11::C_crosshair)
+    defer x11::free_cursor(display, cursor)
+
+    let root = x11::default_root_window(display)
+    x11::grab_pointer(
+        display, root, 0,
+        x11::PointerMotionMask | x11::ButtonReleaseMask,
+        x11::GrabModeAsync, x11::GrabModeAsync,
+        root, cursor,
+        x11::CurrentTime)
+    defer x11::ungrab_pointer(display, x11::CurrentTime)
+
+    x11::grab_keyboard(
+        display, root, 0,
+        x11::GrabModeAsync, x11::GrabModeAsync,
+        x11::CurrentTime)
+    defer x11::ungrab_keyboard(display, x11::CurrentTime)
+
+    let event: x11::Event
+    while true {
+        x11::next_event(display, &event)
+        match event.type {
+            ButtonPress => return event.xbutton.subwindow
+            KeyPress => return root
+        }
+    }
+    return root
+}
+
+let vertex_shader: Shader
+let fragment_shader: Shader
+
+def error_handler(display: &x11::Display, event: &x11::ErrorEvent): i32 {
+    let buf: [char; 1024]
+    x11::get_error_text(display, event.error_code, buf, 1024)
+    println(f"X11 error: {buf}")
+    return 0
+}
+
+def main() {
+    vertex_shader = Shader::read("src/vert.glsl")
+    fragment_shader = Shader::read("src/frag.glsl")
+
+    let boomer_dir = "./"
+    let config_file = "./config.cfg"
+    let windowed = false
+    let delay = 0.0
+
+    let config = default_config
+
+    let display = x11::open_display(null)
+    if not display? {
+        println("Failed to open display\n")
+        return 1
+    }
+    let window = x11::default_root_window(display)
+    x11::set_error_handler(error_handler)
+
+    let tracking_window = x11::default_root_window(display)
+
+    let screen_config = x11::get_screen_info(display, x11::default_root_window(display))
+    let rate = x11::get_current_rate(screen_config)
+    println(f"Current refresh rate: {rate} Hz\n")
+
+    let screen = x11::default_screen(display)
+    let glxMajor: i32
+    let glxMinor: i32
+
+    if (
+        gl::xquery_version(display, &glxMajor, &glxMinor) == 0 or
+        (glxMajor == 1 and glxMinor < 3) or
+        glxMajor < 1
+    ) {
+        println("GLX 1.3 or greater is required\n")
+        return 1
+    }
+
+    println(f"GLX version: {glxMajor}.{glxMinor}\n")
+    println(f"GLX extensions: {gl::xquery_extensions_string(display, screen)}\n")
+
+    let attrs: [i32; 5] = [
+        gl::X_RGBA,
+        gl::X_DEPTH_SIZE, 24,
+        gl::X_DOUBLEBUFFER,
+        0
+    ]
+    let vi = gl::xchoose_visual(display, screen, attrs)
+    if not vi? {
+        println("Failed to choose visual\n")
+        return 1
+    }
+
+    let swa: x11::SetWindowAttributes
+    swa.colormap = x11::create_colormap(display, x11::default_root_window(display), vi.visual, 0)
+    swa.event_mask = x11::ButtonPressMask | x11::ButtonReleaseMask |
+                     x11::KeyPressMask | x11::KeyReleaseMask |
+                     x11::PointerMotionMask | x11::ExposureMask | x11::ClientMessage
+    swa.override_redirect = 1
+    swa.save_under = 1
+
+    let attributes: x11::WindowAttributes
+    x11::get_window_attributes(display, window, &attributes)
+    let win = x11::create_window(
+        display, window,
+        0, 0, attributes.width, attributes.height,
+        0, vi.depth, x11::InputOutput, vi.visual,
+        x11::CWColormap | x11::CWEventMask | x11::CWOverrideRedirect | x11::CWSaveUnder,
+        &swa
+    )
+    x11::map_window(display, win)
+
+    let wm_name = "boomer"
+    let wm_class = "Boomer"
+    let hints = x11::ClassHint(wm_name, wm_class)
+    x11::store_name(display, win, wm_name)
+    x11::set_class_hint(display, win, &hints)
+
+    let wm_del_msg = x11::intern_atom(display, "WM_DELETE_WINDOW", 0)
+    x11::set_wm_protocols(display, win, &wm_del_msg, 1)
+
+    let glc = gl::xcreate_context(display, vi, 0, 1)
+    gl::xmake_current(display, win, glc)
+
+    // gl::load_extensions()
+
+    println("---- before")
+    let shader_prog = new_shader_program(vertex_shader, fragment_shader)
+    let screenshot = ss::new_screenshot(display, tracking_window)
+    println("---- after")
+
+    let w = screenshot.image.width as f32
+    let h = screenshot.image.height as f32
+    
+    // vao, vbo, ebo: GLuint
+    // vertices = [
+    //   # Position                 Texture coords
+    //   [GLfloat    w,     0, 0.0, 1.0, 1.0], # Top right
+    //   [GLfloat    w,     h, 0.0, 1.0, 0.0], # Bottom right
+    //   [GLfloat    0,     h, 0.0, 0.0, 0.0], # Bottom left
+    //   [GLfloat    0,     0, 0.0, 0.0, 1.0]  # Top left
+    // ]
+    // indices = [GLuint(0), 1, 3,
+    //                   1,  2, 3]
+    let vao: u32
+    let vbo: u32
+    let ebo: u32
+    let vertices: [[f32; 5]; 4] = [
+        [w, 0.0, 0.0, 1.0, 1.0],
+        [w, h, 0.0, 1.0, 0.0],
+        [0.0, h, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 0.0, 1.0]
+    ]
+    let indices: [u32; 6] = [0, 1, 3, 1, 2, 3]
+
+    gl::gen_vertex_arrays(1, &vao)
+    gl::gen_buffers(1, &vbo)
+    gl::gen_buffers(1, &ebo)
+    defer {
+        gl::delete_vertex_arrays(1, &vao)
+        gl::delete_buffers(1, &vbo)
+        gl::delete_buffers(1, &ebo)
+    }
+
+    gl::bind_vertex_array(vao)
+    gl::bind_buffer(gl::ARRAY_BUFFER, vbo)
+    gl::buffer_data(gl::ARRAY_BUFFER, 4i32 * 5 * 4, vertices as &u8, gl::STATIC_DRAW)
+
+    gl::bind_buffer(gl::ELEMENT_ARRAY_BUFFER, ebo)
+    gl::buffer_data(gl::ELEMENT_ARRAY_BUFFER, 6i32 * 4, indices as &u8, gl::STATIC_DRAW)
+
+    let stride = 5i32 * 4
+
+    gl::vertex_attrib_pointer(0, 3, gl::FLOAT, 0, stride, null)
+    gl::enable_vertex_attrib_array(0)
+
+    gl::vertex_attrib_pointer(1, 2, gl::FLOAT, 0, stride, (3 * 4) as &u8)
+    gl::enable_vertex_attrib_array(1)
+
+    let texture = 0
+    gl::gen_textures(1, &texture)
+    gl::active_texture(gl::TEXTURE0)
+    gl::bind_texture(gl::TEXTURE_2D, texture)
+
+    gl::tex_image_2d(
+        gl::TEXTURE_2D, 0, gl::RGB, screenshot.image.width, screenshot.image.height,
+        0, gl::BGRA, gl::UNSIGNED_BYTE, screenshot.image.data as &u8
+    )
+    gl::generate_mipmap(gl::TEXTURE_2D)
+
+    gl::uniform1i(gl::UL(shader_prog, "tex"), 0)
+    gl::enable(gl::TEXTURE_2D)
+
+    gl::tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST)
+    gl::tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST)
+    gl::tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_BORDER)
+    gl::tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_BORDER)
+
+    let quitting = false
+    let camera: Camera
+    camera.scale = 1.0
+
+    let mouse: Mouse
+    let pos = get_cursor_pos(display)
+    mouse.curr = pos
+    mouse.prev = pos
+
+    let flashlight: Flashlight
+    flashlight.enabled = false
+    flashlight.radius = 0.0
+
+    let dt = 1.0 / rate as f32
+    let origin_window: x11::Window
+    let revert_to_return: i32
+    x11::get_input_focus(display, &origin_window, &revert_to_return)
+
+    while not quitting {
+        if not windowed {
+            x11::set_input_focus(display, tracking_window, x11::RevertToParent, x11::CurrentTime)
+        }
+
+        let wa: x11::WindowAttributes
+        x11::get_window_attributes(display, tracking_window, &wa)
+        gl::viewport(0, 0, wa.width, wa.height)
+
+
+
+    }
+
+    let s = ss::new_screenshot(display, window)
+    color_screenshot(s.image)
+    ss::save_to_ppm(s.image, "screenshot.ppm")
+    println("Screenshot saved to screenshot.ppm\n")
+}

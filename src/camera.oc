@@ -1,0 +1,43 @@
+import std::vec::{ Vec2f, Vec2i }
+import .x11
+import .config::{ Config}
+
+const VELOCITY_THRESHOLD: f32 = 15.0
+
+struct Mouse {
+    curr: Vec2f,
+    prev: Vec2f,
+    drag: i32,
+}
+
+struct Camera {
+    position: Vec2f,
+    velocity: Vec2f,
+    scale: f32,
+    delta_scale: f32,
+    scale_pivot: Vec2f,
+}
+
+def Camera::world(&this, v: Vec2f): Vec2f => v / .scale
+
+def Camera::update(
+    &this,
+    config: &Config,
+    dt: f32,
+    mouse: &Mouse,
+    image: &x11::Image,
+    window_size: Vec2f,
+) {
+    if (.delta_scale.abs() > 0.5) {
+        let p0 = .scale_pivot - window_size * 0.5 / .scale;
+        .scale = (.scale + .delta_scale * dt).max(config.min_scale);
+        let p1 = .scale_pivot - window_size * 0.5 / .scale;
+        .position =.position + p0 - p1;
+        .delta_scale -= .delta_scale * dt * config.scale_friction;
+    }
+
+    if mouse.drag == 0 and .velocity.length() > VELOCITY_THRESHOLD {
+        .position = .position + .velocity * dt;
+        .velocity = .velocity - .velocity * dt * config.drag_friction;
+    }
+}

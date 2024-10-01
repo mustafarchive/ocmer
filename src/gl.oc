@@ -1,0 +1,147 @@
+
+// @compiler c_include "GL/gl.h"
+@compiler c_include "GL/glew.h"
+// #include <GL/gl.h>
+// #include <GL/glext.h>
+// @compiler c_include "GL/glext.h"
+
+[extern "GL_COLOR_BUFFER_BIT"] const COLOR_BUFFER_BIT: u32
+[extern "GL_DEPTH_BUFFER_BIT"] const DEPTH_BUFFER_BIT: u32
+
+[extern "GL_TRIANGLES"] const TRIANGLES: u32
+[extern "GL_FLOAT"] const FLOAT: u32
+[extern "GL_UNSIGNED_INT"] const UNSIGNED_INT: u32
+[extern "GL_UNSIGNED_BYTE"] const UNSIGNED_BYTE: u32
+
+[extern "GL_VERTEX_SHADER"] const VERTEX_SHADER: u32
+[extern "GL_FRAGMENT_SHADER"] const FRAGMENT_SHADER: u32
+[extern "GL_COMPILE_STATUS"] const COMPILE_STATUS: u32
+[extern "GL_LINK_STATUS"] const LINK_STATUS: u32
+
+[extern "GL_STATIC_DRAW"] const STATIC_DRAW: u32
+[extern "GL_DYNAMIC_DRAW"] const DYNAMIC_DRAW: u32
+
+[extern "GL_TEXTURE_2D"] const TEXTURE_2D: u32
+[extern "GL_TEXTURE0"] const TEXTURE0: u32
+[extern "GL_RGB"] const RGB: i32
+[extern "GL_BGRA"] const BGRA: u32
+
+[extern "GL_ARRAY_BUFFER"] const ARRAY_BUFFER: u32
+[extern "GL_ELEMENT_ARRAY_BUFFER"] const ELEMENT_ARRAY_BUFFER: u32
+
+[extern "GL_TEXTURE_MIN_FILTER"] const TEXTURE_MIN_FILTER: u32
+[extern "GL_TEXTURE_MAG_FILTER"] const TEXTURE_MAG_FILTER: u32
+[extern "GL_TEXTURE_WRAP_S"] const TEXTURE_WRAP_S: u32
+[extern "GL_TEXTURE_WRAP_T"] const TEXTURE_WRAP_T: u32
+
+[extern "GL_NEAREST"] const NEAREST: i32
+[extern "GL_CLAMP_TO_BORDER"] const CLAMP_TO_BORDER: i32
+
+/////
+
+[extern "glClearColor"] def clear_color(r: f32, g: f32, b: f32, a: f32)
+[extern "glClear"] def clear(mask: u32)
+[extern "glUseProgram"] def use_program(program: u32)
+
+[extern "glGetUniformLocation"] def get_uniform_location(program: u32, name: str): i32
+[extern "glGetUniformLocation"] def UL(program: u32, name: str): i32
+
+[extern "glUniform2f"] def uniform2f(location: i32, v0: f32, v1: f32)
+[extern "glUniform1f"] def uniform1f(location: i32, v0: f32)
+[extern "glUniform1i"] def uniform1i(location: i32, v0: i32)
+
+
+[extern "glBindVertexArray"] def bind_vertex_array(array: u32)
+[extern "glBindBuffer"] def bind_buffer(target: u32, buffer: u32)
+[extern "glDrawArrays"] def draw_arrays(mode: u32, first: i32, count: i32)
+
+[extern "glDrawElements"] def draw_elements(mode: u32, count: i32, type: u32, indices: &u32)
+[extern "glFinish"] def finish()
+[extern "glXSwapBuffers"] def swap_buffers(display: u32, window: u32)
+
+[extern "glCreateShader"] def create_shader(shader_type: u32): u32
+[extern "glShaderSource"] def shader_source(shader: u32, count: i32, string: str, length: &i32)
+[extern "glCompileShader"] def compile_shader(shader: u32)
+[extern "glGetShaderiv"] def get_shaderiv(shader: u32, pname: u32, params: &i32)
+[extern "glGetShaderInfoLog"] def get_shader_info_log(shader: u32, buf_size: i32, length: &i32, info_log: str)
+[extern "glDeleteShader"] def delete_shader(shader: u32)
+[extern "glCreateProgram"] def create_program(): u32
+[extern "glAttachShader"] def attach_shader(program: u32, shader: u32)
+[extern "glLinkProgram"] def link_program(program: u32)
+[extern "glGetProgramiv"] def get_programiv(program: u32, pname: u32, params: &i32)
+[extern "glGetProgramInfoLog"] def get_program_info_log(program: u32, buf_size: i32, length: &i32, info_log: str)
+
+// glx stuff, include
+@compiler c_include "GL/glx.h"
+import .x11
+
+[extern "glXQueryVersion"]
+def xquery_version(display: &x11::Display, major: &i32, minor: &i32): i32
+
+[extern "glXQueryExtensionsString"]
+def xquery_extensions_string(display: &x11::Display, screen: i32): str
+
+[extern "glXChooseVisual"]
+def xchoose_visual(display: &x11::Display, screen: i32, attrib_list: &i32): &x11::VisualInfo
+
+[extern "GLX_RGBA"] const X_RGBA: i32
+[extern "GLX_DOUBLEBUFFER"] const X_DOUBLEBUFFER: i32
+[extern "GLX_DEPTH_SIZE"] const X_DEPTH_SIZE: i32
+[extern "GLX_RED_SIZE"] const X_RED_SIZE: i32
+
+[extern "GLXContext"]
+struct XContext {}
+
+[extern "glXCreateContext"]
+def xcreate_context(display: &x11::Display, visual: &x11::VisualInfo, share_list: u32, direct: i32): XContext
+
+[extern "glXMakeCurrent"]
+def xmake_current(display: &x11::Display, drawable: x11::Window, context: XContext): i32
+
+[extern "loadExtensions"]
+def load_extensions(): i32
+
+[extern "glGenVertexArrays"]
+def gen_vertex_arrays(n: i32, arrays: &u32)
+
+[extern "glGenBuffers"]
+def gen_buffers(n: i32, buffers: &u32)
+
+[extern "glDeleteVertexArrays"]
+def delete_vertex_arrays(n: i32, arrays: &u32)
+
+[extern "glDeleteBuffers"]
+def delete_buffers(n: i32, buffers: &u32)
+
+[extern "glBufferData"]
+def buffer_data(target: u32, size: i32, data: &u8, usage: u32)
+
+[extern "glVertexAttribPointer"]
+def vertex_attrib_pointer(index: u32, size: i32, type: u32, normalized: i32, stride: i32, pointer: &u8)
+
+[extern "glEnableVertexAttribArray"]
+def enable_vertex_attrib_array(index: u32)
+
+[extern "glGenTextures"]
+def gen_textures(n: i32, textures: &u32)
+
+[extern "glActiveTexture"]
+def active_texture(texture: u32)
+
+[extern "glBindTexture"]
+def bind_texture(target: u32, texture: u32)
+
+[extern "glTexImage2D"]
+def tex_image_2d(target: u32, level: i32, internal_format: i32, width: i32, height: i32, border: i32, format: u32, type: u32, data: &u8)
+
+[extern "glGenerateMipmap"]
+def generate_mipmap(target: u32)
+
+[extern "glTexParameteri"]
+def tex_parameteri(target: u32, pname: u32, param: i32)
+
+[extern "glEnable"]
+def enable(cap: u32)
+
+[extern "glViewport"]
+def viewport(x: i32, y: i32, width: i32, height: i32)
